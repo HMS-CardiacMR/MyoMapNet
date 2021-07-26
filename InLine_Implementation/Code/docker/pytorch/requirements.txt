@@ -1,0 +1,14 @@
+cython
+pyxb
+opencv-python
+pydicom
+scipy
+matplotlib
+numpy
+scikit_image
+torchvision
+torch
+pytorch_lightning
+h5py
+
+
