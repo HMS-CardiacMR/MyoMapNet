@@ -85,9 +85,6 @@ class Server:
             elif (config == "analyzeflow"):
                 logging.info("Starting analyzeflow processing based on config")
                 analyzeflow.process(connection, config, metadata)
-            elif (config == "t1mapping"):
-                logging.info("Starting t1mapping processing based on config")
-                t1mapping.process(connection, config, metadata)
             elif (config == "myomapnet"):
                 logging.info("Starting myomapnet processing based on config")
                 myomapnet.process(connection, config, metadata)
