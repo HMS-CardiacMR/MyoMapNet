@@ -51,9 +51,17 @@ RUN apt-get update && apt-get install --no-install-recommends -y libxslt1.1 libh
 RUN mkdir -p /opt/code
 
 RUN  cd /opt/code \
+     && git clone https://github.com/ismrmrd/ismrmrd-python.git \
+     && cd /opt/code/ismrmrd-python \
+     && pip3 install --no-cache-dir .
+
+RUN  cd /opt/code \
      && git clone https://github.com/ismrmrd/ismrmrd-python-tools.git \
      && cd /opt/code/ismrmrd-python-tools \
      && pip3 install --no-cache-dir .
+
+# Various visualization tools including colormaps
+# RUN pip3 install --no-cache-dir matplotlib
 
 # Install dependencies needed
 RUN pip3 install --no-cache-dir cached-property==1.5.2

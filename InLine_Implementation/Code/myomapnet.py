@@ -15,11 +15,14 @@ from collections import defaultdict
 from myloss import *
 from unet import UNet
 from utils import *
+from utils.cmplxBatchNorm import magnitude, normalizeComplexBatch_byMagnitudeOnly, log_mag, exp_mag
+from utils.fftutils import *
+from utils.data_vis import *
 
 def process(connection, config, metadata):
-
-    logging.info("---------START NEW MYOMAPNET LOG---------")
-    logging.info("Config: %s", config)
+    # Update this with time to make sure code is updating
+    logging.info("---------START NEW MYOMAPNET LOG 6:19 AM---------\n")
+    logging.info("Config: \n%s", config)
 
     # Metadata should be MRD formatted header, but may be a string
     # if it failed conversion earlier
@@ -27,8 +30,8 @@ def process(connection, config, metadata):
         # Disabled due to incompatibility between PyXB and Python 3.8:
         # https://github.com/pabigot/pyxb/issues/123
         # # logging.info("Metadata: \n%s", metadata.toxml('utf-8'))
-        logging.info("Incoming dataset contains %d encodings", len(metadata.encoding))
-        logging.info("First encoding is of type '%s', with a field of view of (%s x %s x %s)mm^3 and a matrix size of (%s x %s x %s)", 
+        logging.info("Incoming dataset contains %d encodings\n", len(metadata.encoding))
+        logging.info("First encoding is of type '%s', with a field of view of (%s x %s x %s)mm^3 and a matrix size of (%s x %s x %s)\n", 
             metadata.encoding[0].trajectory, 
             metadata.encoding[0].encodedSpace.matrixSize.x, 
             metadata.encoding[0].encodedSpace.matrixSize.y, 
@@ -38,7 +41,7 @@ def process(connection, config, metadata):
             metadata.encoding[0].encodedSpace.fieldOfView_mm.z)
 
     except:
-        logging.info("Improperly formatted metadata: %s", metadata)
+        logging.info("Improperly formatted metadata: \n%s", metadata)
 
     # Continuously parse incoming data parsed from MRD messages
     try:
@@ -48,10 +51,8 @@ def process(connection, config, metadata):
 
         timeScalingFactor = 1000
 
-        # Loop through all the data being sent over
         for item in connection:
 
-            # If the item being sent is an image then process it
             if isinstance(item, ismrmrd.Image):
 
                 # Store header for later use
@@ -84,6 +85,7 @@ def process(connection, config, metadata):
                 # Buffer images
                 t1_weighted_images[slice_index].append(pixel_intensities)
 
+
         ####################################
         #
         # Store Buffered Data To 5D Array
@@ -91,20 +93,20 @@ def process(connection, config, metadata):
         ####################################
 
         # Generate numpy array which will be passed into model
-        x_length = np.shape(t1_weighted_images[0])[1] # oldHeader.matrix_size[1]
-        y_length = np.shape(t1_weighted_images[0])[2] # oldHeader.matrix_size[0]
-        nSlices = oldHeader.slice + 1   # Slices is index value so we increment by 1
-        nCoils = 1
+        x_length = oldHeader.matrix_size[1]
+        y_length = oldHeader.matrix_size[0]
+        slices = oldHeader.slice + 1   # Slices is index value so we increment by 1
+        coils = 1
         images = 8 # 2X number of images (pixel intensities + inversion times)
-        pixelDims = (nSlices, nCoils, images, x_length, y_length)
+        pixelDims = (slices, coils, images, x_length, y_length)
         tst_t1w_TI = np.zeros(pixelDims)
 
-        for slice_index in range(nSlices):
+        for slice_index in range(slices):
 
             # Convert list of T1 weighted images into np array
             t1_weighted_IMGs_arr = np.array(t1_weighted_images[slice_index])
             # Store shape for later processing
-            arrShape = t1_weighted_IMGs_arr.shape  #[0] = nImages, [1] = X-Axis, [2] = Y-Axis
+            arrShape = t1_weighted_IMGs_arr.shape  #[0] = 13, [1] = 208, [2] = 188
 
             # Select only the MOCO images
             t1_weighted_IMGs_Arr_sub6 = t1_weighted_IMGs_arr[6:12,:,:,]
@@ -132,6 +134,7 @@ def process(connection, config, metadata):
                 tst_t1w_TI[slice_index,0,iT1Num,:,:] = t1_weighted_IMGs_Arr_sub4[iT1Num,:,:]
                 tst_t1w_TI[slice_index,0,iT1Num+4,:,:] = inversion_time_Matrix[:,:,iT1Num]
 
+
         ####################################
         #
         # Normalize Data
@@ -157,8 +160,12 @@ def process(connection, config, metadata):
         # Send T1-Map back to ICE
         for i in range(0, t1_maps.shape[0]):
 
-            # Normalize and convert to int16
             data = t1_maps[i,0,...]
+
+            # Multiply by Siemens scaling factor
+            data *= 1.0365
+
+            # Normalize and convert to int16
             data = data.astype(np.int16)
 
             # Apply thresholding to remove outliers
@@ -172,6 +179,16 @@ def process(connection, config, metadata):
             # Format as ISMRMRD image data
             image = ismrmrd.Image.from_array(data)
 
+            # # Get new image header
+            # newHeader = image.getHead()
+
+            # # Set image position so that rotation is correct
+            # newHeader.position = oldHeader.position
+            # newHeader.read_dir = oldHeader.read_dir
+            # newHeader.phase_dir = oldHeader.phase_dir
+            # newHeader.slice_dir = oldHeader.slice_dir
+            # newHeader.patient_table_position = oldHeader.patient_table_position
+
             # Set field of view
             image.field_of_view = (ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.x), 
                                     ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.y), 
@@ -182,8 +199,7 @@ def process(connection, config, metadata):
             tmpMeta['DataRole']                       = 'Image'
             tmpMeta['ImageProcessingHistory']         = ['PYTHON', 'MYOMAPNET']
             tmpMeta['SequenceDescriptionAdditional']  = 'FIRE'
-
-            # Set colormap values
+            # Example for setting colormap
             tmpMeta['LUTFileName']                    = 'MicroDeltaHotMetal.pal'
             tmpMeta['WindowCenter']                   = '1300'
             tmpMeta['WindowWidth']                    = '1300'
@@ -199,6 +215,23 @@ def process(connection, config, metadata):
             logging.debug("Sending images to client")
             connection.send_image(image)
 
+        # Send individual T1-W images back to ICE
+        # for i in range(0, len(t1_weighted_images)):
+        #     data = t1_weighted_images[i]
+        #     data = data.astype(np.int16)
+
+        #     # Format as ISMRMRD image data
+        #     image = ismrmrd.Image.from_array(data)
+
+        #     # Set field of view
+        #     image.field_of_view = (ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.x), 
+        #                             ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.y), 
+        #                             ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.z))
+
+        #     # Send image back to the client
+        #     logging.debug("Sending images to client")
+        #     connection.send_image(image)
+
     finally:
         connection.send_close()
 
@@ -206,6 +239,8 @@ def extract_minihead_long_param(string, data_type, var_name):
 
     r = re.compile(fr'<Param{data_type}\."{var_name}">' r'{ "?(.+)"? }')
     res = r.search(string)
+
+    # return res.group(1) if (res) else None
 
     if res is None:
         return None
@@ -237,14 +272,31 @@ def myomapnetpredict(tst_t1w_TI):
     # Sets the module in evaluation mode.
     net.eval()
 
+    num_params = 0
+
+    for parameters in net.parameters():
+        num_params += multiply_elems(parameters.shape)
+
+    print('Total number of parameters: {0}'.format(num_params))
+
     if params.multi_GPU:
         net = torch.nn.DataParallel(net, device_ids=params.device_ids[:-1]).cuda()
     else:
         net = torch.nn.DataParallel(net, device_ids=params.device_ids[:-1])
         net.to(params.device)
 
+
+    ####################################
+    #
+    # Initializations
+    #
+    ####################################
+
     # Dynamicically build path to models directory
-    params.model_save_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'models')
+    params.model_save_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'models', 'Model_010_R5.0Trial_T1Fitting_5071_MOLLI5_MAE_alldata')
+
+    if not os.path.exists(params.model_save_dir):
+        os.makedirs(params.model_save_dir)
 
     try:
         ###########################################
@@ -253,7 +305,7 @@ def myomapnetpredict(tst_t1w_TI):
         #
         ############################################
 
-        optimizer = optim.SGD(net.parameters(), lr=params.args.lr, momentum=0.8)
+        optimizer = optim.SGD(net.parameters(), lr=params.lr, momentum=0.8)
 
         ###########################################
         #
@@ -263,9 +315,9 @@ def myomapnetpredict(tst_t1w_TI):
 
         models = os.listdir(params.model_save_dir)
         models = [m for m in models if m.endswith('.pth')]
-        s_epoch = 2196  ## -1: load latest model or start from 1 if there is no saved models
-                        ##  0: don't load any model; start from model #1
-                        ##  num: load model #num
+        s_epoch = 4996 ## -1: load latest model or start from 1 if there is no saved models
+                    ##  0: don't load any model; start from model #1
+                    ##  num: load model #num
 
         def load_model(epoch):
             print('loading model at epoch ' + str(epoch))
@@ -289,34 +341,68 @@ def myomapnetpredict(tst_t1w_TI):
             except:
                 print('Model {0} does not exist!'.format(s_epoch))
 
-        try:
-            tst_N = tst_t1w_TI.shape[0]
-            tst_lst = list(range(0,tst_N))
-            batchSize = 3
+        tr_N = tst_t1w_TI.shape[0]
+        tr_lst = list(range(0, tr_N))
 
-            with torch.no_grad():
-                for idx in range(0, tst_N, batchSize):
-                    try:
-                        X = Variable(torch.FloatTensor(tst_t1w_TI[tst_lst[idx:idx + batchSize]])).to('cpu')
+        for epoch in range(s_epoch, params.epochs+1):
 
-                        xs = X.shape
+            print('epoch {}/{}...'.format(epoch, params.epochs))
 
-                        X = X.permute((0, 3, 4, 1, 2)).reshape((xs[0] * xs[3] * xs[4], xs[1], xs[2]))
+            random.shuffle(tr_lst)
 
-                        y_pred = net(X.to('cpu')).to('cpu')
+            try:
+                ###########################################
+                #
+                # Training
+                #
+                ############################################
 
-                        pred_T1_5 = y_pred.reshape((xs[0],1,xs[3],xs[4]))
+                load_model(epoch)
 
-                        t1_maps = pred_T1_5.cpu().data.numpy()
+                #####################################
+                #
+                # Validation
+                #
+                #####################################
 
-                        return t1_maps
+                tst_N = tst_t1w_TI.shape[0]
+                tst_lst = list(range(0,tst_N))
+                bs = 3
 
-                    except Exception as e:
-                        traceback.print_exc()
-                        continue
-        except Exception as e:
-            traceback.print_exc()
-            print(e)
+                if epoch < params.epochs and not params.Validation_Only: #(params.Validation_Only or (epoch < 100 and epoch % 5 > 0)):
+                    continue
+
+                TAG = 'Validation'
+
+                with torch.no_grad():
+                    for idx in range(0, tst_N, bs):
+                        try:
+                            X = Variable(torch.FloatTensor(tst_t1w_TI[tst_lst[idx:idx + bs]])).to('cpu')
+
+                            t_const = 1e6
+                            xs = X.shape
+
+                            X = X.permute((0, 3, 4, 1, 2)).reshape((xs[0] * xs[3] * xs[4], xs[1], xs[2]))
+
+                            y_pred = net(X.to('cpu')).to('cpu')
+
+                            Recon_Nufft_Map = False
+                            pred_T1_5 = y_pred.reshape((xs[0],1,xs[3],xs[4]))
+
+                            t1_maps = pred_T1_5.cpu().data.numpy()
+
+                            return t1_maps
+
+                        except Exception as e:
+                            traceback.print_exc()
+
+                            continue
+                    break
+
+            except Exception as e:
+                traceback.print_exc()
+                print(e)
+                continue
 
     except KeyboardInterrupt:
         print('Interrupted')

@@ -7,13 +7,14 @@ Created on May 17, 2018
 
 import argparse
 
-# from pycparser.c_ast import Switch
+from pycparser.c_ast import Switch
 import torch
 import numpy as np
 import os
 
 ########################## Initializations ########################################
 model_names = 'recoNet_Model1'
+"""
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 # parser.add_argument('data', metavar='DIR',
 #                     help='path to dataset')
@@ -64,7 +65,7 @@ parser.add_argument('--model', '-m', default='MODEL_EPOCH417.pth',
                     help='Specify the file in which is stored the model'
                          " (default : 'MODEL.pth')")
 ###################################################################
-
+"""
 os.environ["CUDA_VISIBLE_DEVICES"] = '3,4'
 
 
@@ -79,7 +80,7 @@ class Parameters():
         self.tbVisualize = False
         self.tbVisualize_kernels = False
         self.tbVisualize_featuremaps = False
-        self.multi_GPU = False # True
+        self.multi_GPU = False
 
         if self.Op_Node in ['myPC', 'alpha_V12']:
             self.device_ids = [0]
@@ -101,12 +102,12 @@ class Parameters():
 
         print('-- # GPUs: ', len(self.device_ids))
         print('-- batch_size: ', self.batch_size)
-        self.args = parser.parse_args()
+        # self.args = parser.parse_args()
 
         self.activation_func = 'CReLU'  # 'CReLU' 'CLeakyeak' # 'modReLU' 'KAF2D' 'ZReLU'
-        self.args.lr = 1e-8 #0.0001
+        self.lr = 1e-8 #0.0001
         self.dropout_ratio = 0.0
-        self.epochs = 2196
+        self.epochs = 4996
         self.training_percent = 0.8
         self.nIterations = 1
         self.magnitude_only = False
@@ -249,4 +250,18 @@ class Parameters():
                 self.net_save_dir = '/data2/helrewaidy/Models/MatData/'
                 self.tensorboard_dir = '/data2/helrewaidy/Models/ReconNet_Model/' + self.arch_name + '_tensorboard/'
 
-        self.args.model = self.model_save_dir + 'MODEL_EPOCH.pth'
+        self.model = self.model_save_dir + 'MODEL_EPOCH.pth'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
