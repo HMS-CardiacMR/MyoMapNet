@@ -315,7 +315,7 @@ def myomapnetpredict(tst_t1w_TI):
 
         models = os.listdir(params.model_save_dir)
         models = [m for m in models if m.endswith('.pth')]
-        s_epoch = 4996 ## -1: load latest model or start from 1 if there is no saved models
+        s_epoch = 945 ## -1: load latest model or start from 1 if there is no saved models
                     ##  0: don't load any model; start from model #1
                     ##  num: load model #num
 
