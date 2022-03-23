@@ -216,21 +216,21 @@ def process(connection, config, metadata):
             connection.send_image(image)
 
         # Send individual T1-W images back to ICE
-        # for i in range(0, len(t1_weighted_images)):
-        #     data = t1_weighted_images[i]
-        #     data = data.astype(np.int16)
+        #  for i in range(0, len(t1_weighted_images[0])):
+        #      data = t1_weighted_images[0][i]
+        #      data = data.astype(np.int16)
 
         #     # Format as ISMRMRD image data
         #     image = ismrmrd.Image.from_array(data)
 
         #     # Set field of view
         #     image.field_of_view = (ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.x), 
-        #                             ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.y), 
-        #                             ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.z))
+        #                            ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.y), 
+        #                            ctypes.c_float(metadata.encoding[0].reconSpace.fieldOfView_mm.z))
 
-        #     # Send image back to the client
-        #     logging.debug("Sending images to client")
-        #     connection.send_image(image)
+        #    # Send image back to the client
+        #    logging.debug("Sending images to client")
+        #    connection.send_image(image)
 
     finally:
         connection.send_close()
@@ -283,7 +283,7 @@ def myomapnetpredict(tst_t1w_TI):
         net = torch.nn.DataParallel(net, device_ids=params.device_ids[:-1]).cuda()
     else:
         net = torch.nn.DataParallel(net, device_ids=params.device_ids[:-1])
-        net.to(params.device)
+        net = net.module.to(params.device)
 
 
     ####################################
@@ -324,7 +324,19 @@ def myomapnetpredict(tst_t1w_TI):
             print('Total Models:', len(models))
             model = torch.load(os.path.join(params.model_save_dir, models[0][0:11] + str(epoch) + '.pth'), map_location=torch.device('cpu'))
             print('Using Model:', os.path.join(params.model_save_dir, models[0][0:11] + str(epoch) + '.pth'))
-            net.load_state_dict(model['state_dict'])
+
+            # create new OrderedDict that does not contain `module.`
+            from collections import OrderedDict
+
+            new_state_dict = OrderedDict()
+            for k, v in model['state_dict'].items():
+                name = k.replace("module.", "") # remove `module.`
+                new_state_dict[name] = v
+
+            # load params
+            net.load_state_dict(new_state_dict)
+
+            # net.load_state_dict(model['state_dict'], strict=False)
             optimizer.load_state_dict(model['optimizer'])
 
         if s_epoch == -1:
