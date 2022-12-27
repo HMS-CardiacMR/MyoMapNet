@@ -4,7 +4,7 @@
 
 ## Summary Video
 
-[![Click to watch video](https://img.youtube.com/vi/zrQ7A0B26E0/maxresdefault.jpg)](http://www.youtube.com/watch?v=zrQ7A0B26E0 "A Guide To Deploying Deep Learning Models On Scanner: A Case Study With MyoMapNet")
+[![A Guide To Deploying Deep Learning Models On Scanner: A Case Study With MyoMapNet](https://img.youtube.com/vi/zrQ7A0B26E0/maxresdefault.jpg)](http://www.youtube.com/watch?v=zrQ7A0B26E0 "Click to play video")
 
 ## Abstract
 
